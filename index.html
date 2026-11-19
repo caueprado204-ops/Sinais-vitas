@@ -68,7 +68,7 @@
 <div id="startOverlay">
   <div class="card">
     <h1>Monitor — Simulação</h1>
-    <p>PA 170/90 · FC 66 · SpO₂ 75% · FR 8–9<br>O navegador só libera áudio depois de um toque.</p>
+    <p>PA 170/90 · FC 66 · SpO₂ 69% · FR 8–9<br>O navegador só libera áudio depois de um toque.</p>
     <div class="btns">
       <button class="on" id="startSound">🔊 Iniciar com som</button>
       <button id="startMute">🔇 Iniciar sem som</button>
@@ -103,7 +103,7 @@
     <div class="num spo2" id="nSpo2">
       <div class="name"><span>SpO₂</span><span style="font-size:10px">%</span></div>
       <div class="lim">100<br>90</div>
-      <div class="val" id="vSpo2">75</div>
+      <div class="val" id="vSpo2">69</div>
       <div class="unit">PR <span id="vPr">66</span></div>
     </div>
   </div>
@@ -132,12 +132,12 @@
 (() => {
   // ---------- Parâmetros da simulação ----------
   const STAGES = [
-    {name:'PARTE 1', hr:66, sys:170, dia:90},
-    {name:'PARTE 2', hr:60, sys:180, dia:100},
+    {name:'PARTE 1', hr:66, sys:170, dia:90, spo2:69},
+    {name:'PARTE 2', hr:60, sys:180, dia:100, spo2:75},
   ];
   let stage = 0;
   let HR = 66, SYS = 170, DIA = 90;
-  const SPO2 = 75;
+  let SPO2 = 69;
   let rr = 9;                 // alterna entre 8 e 9
   let soundOn = true, alarmOn = true;
 
@@ -149,7 +149,7 @@
 
   // ---------- Alarmes ----------
   const alarms = [
-    {txt:'*** SpO₂ BAIXA 75 < 90', cls:'high', box:'nSpo2'},
+    {txt:'*** SpO₂ BAIXA 69 < 90', cls:'high', box:'nSpo2'},
     {txt:'** FR BAIXA', cls:'med', box:'nResp'},
     {txt:'** PNI SIS ALTA 170 > 160', cls:'med', box:null},
   ];
@@ -216,7 +216,9 @@
     ensureAudio();
     stage = 1 - stage;
     const s = STAGES[stage];
-    HR = s.hr;
+    HR = s.hr; SPO2 = s.spo2;
+    alarms[0].txt = `*** SpO₂ BAIXA ${SPO2} < 90`; renderAlarms();
+    document.getElementById('vSpo2').textContent = SPO2;
     document.getElementById('vHr').textContent = HR;
     document.getElementById('vPr').textContent = HR;
     document.getElementById('stageLbl').textContent = s.name;
