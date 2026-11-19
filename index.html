@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor Multiparamétrico — Simulação</title>
+<style>
+  :root{
+    --bg:#05070a; --panel:#0b0f14; --line:#1b232d;
+    --ecg:#39ff6a; --spo2:#2fe0ff; --resp:#ffe14a; --nibp:#ff6b6b; --txt:#cfd8e3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--txt);font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{display:flex;flex-direction:column;min-height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:#0d1218;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .pt{font-size:13px;line-height:1.3}
+  .pt b{color:#fff;font-size:14px}
+  .clock{font-variant-numeric:tabular-nums;font-size:14px;color:#9fb0c2}
+  .controls{display:flex;gap:6px}
+  button{font:inherit;font-size:13px;font-weight:600;border:1px solid #2a3542;background:#141b24;color:#e6edf5;padding:8px 12px;border-radius:8px;cursor:pointer}
+  button.on{background:#1d3a26;border-color:#2f7d45;color:#bff5cc}
+  button.off{background:#3a1d1d;border-color:#7d2f2f;color:#ffc9c9}
+  #alarmBar{display:flex;gap:6px;flex-wrap:wrap;padding:6px 12px;min-height:38px;align-items:center;background:#0a0d11;border-bottom:1px solid var(--line)}
+  .alarm{font-size:12px;font-weight:800;letter-spacing:.04em;padding:5px 9px;border-radius:4px;text-transform:uppercase}
+  .alarm.high{background:#d81f1f;color:#fff;animation:blink 1s steps(1) infinite}
+  .alarm.med{background:#e0b800;color:#111;animation:blink 2s steps(1) infinite}
+  .alarm.silenced{animation:none;opacity:.55}
+  .muted-tag{font-size:12px;color:#ff9b9b;font-weight:700;margin-left:auto}
+  @keyframes blink{50%{opacity:.25}}
+  main{flex:1;display:flex;flex-direction:column;gap:2px;padding:4px}
+  .row{flex:1;min-height:92px;display:flex;background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .wave{flex:1;position:relative;min-width:0}
+  .wave canvas{position:absolute;inset:0;width:100%;height:100%}
+  .wave .lbl{position:absolute;left:8px;top:5px;font-size:12px;font-weight:700;z-index:2}
+  .num{width:150px;flex-shrink:0;border-left:1px solid var(--line);padding:6px 10px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
+  .num .name{font-size:12px;font-weight:700;display:flex;justify-content:space-between}
+  .num .lim{font-size:10px;opacity:.7;line-height:1.2;text-align:right}
+  .num .val{font-size:52px;font-weight:300;line-height:1;text-align:right;font-variant-numeric:tabular-nums}
+  .num .unit{font-size:11px;opacity:.8;text-align:right}
+  .num.alarming{animation:bgblink 1s steps(1) infinite}
+  @keyframes bgblink{50%{background:#4a0d0d}}
+  .ecg{color:var(--ecg)} .spo2{color:var(--spo2)} .resp{color:var(--resp)} .nibp{color:var(--nibp)}
+  .heart{display:inline-block;transition:transform .08s}
+  .heart.beat{transform:scale(1.4)}
+  .nibpRow{flex:0 0 auto;min-height:0}
+  .nibpRow .box{flex:1;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;gap:10px;flex-wrap:wrap}
+  .nibpRow .big{font-size:46px;font-weight:300;font-variant-numeric:tabular-nums;line-height:1}
+  .nibpRow .map{font-size:24px;opacity:.85;margin-left:6px}
+  .nibpRow .meta{font-size:11px;opacity:.75;text-align:right;line-height:1.4}
+  #startOverlay{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  #startOverlay .card{background:#0f151c;border:1px solid #2a3542;border-radius:14px;padding:22px;max-width:360px;text-align:center}
+  #startOverlay h1{font-size:18px;margin-bottom:8px;color:#fff}
+  #startOverlay p{font-size:13px;opacity:.8;margin-bottom:16px;line-height:1.45}
+  #startOverlay .btns{display:flex;flex-direction:column;gap:8px}
+  #startOverlay button{padding:12px;font-size:15px}
+  footer{font-size:10px;opacity:.45;text-align:center;padding:4px}
+  @media (max-width:520px){
+    .num{width:112px;padding:5px 8px}
+    .num .val{font-size:40px}
+    .nibpRow .big{font-size:36px}
+    .nibpRow .map{font-size:18px}
+    .row{min-height:84px}
+  }
+</style>
+</head>
+<body>
+
+<div id="startOverlay">
+  <div class="card">
+    <h1>Monitor — Simulação</h1>
+    <p>PA 170/90 · FC 66 · SpO₂ 75% · FR 8–9<br>O navegador só libera áudio depois de um toque.</p>
+    <div class="btns">
+      <button class="on" id="startSound">🔊 Iniciar com som</button>
+      <button id="startMute">🔇 Iniciar sem som</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="pt"><b>LEITO 04</b> · Adulto · Simulação<br><span style="opacity:.7">Paciente: SIMULADO</span></div>
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="controls">
+    <button id="btnStage" style="background:#1d2a3a;border-color:#3b5a80;color:#cfe3ff">▶ Parte 2</button>
+    <button id="btnSound" class="on">🔊 Som</button>
+    <button id="btnAlarm" class="on">🔔 Alarme</button>
+  </div>
+</header>
+
+<div id="alarmBar"></div>
+
+<main>
+  <div class="row">
+    <div class="wave"><span class="lbl ecg">II &nbsp;×1 &nbsp;25 mm/s</span><canvas id="cEcg"></canvas></div>
+    <div class="num ecg" id="nEcg">
+      <div class="name"><span>FC</span><span class="heart" id="heart">♥</span></div>
+      <div class="lim">120<br>50</div>
+      <div class="val" id="vHr">66</div>
+      <div class="unit">bpm</div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="wave"><span class="lbl spo2">Pleth</span><canvas id="cSpo2"></canvas></div>
+    <div class="num spo2" id="nSpo2">
+      <div class="name"><span>SpO₂</span><span style="font-size:10px">%</span></div>
+      <div class="lim">100<br>90</div>
+      <div class="val" id="vSpo2">75</div>
+      <div class="unit">PR <span id="vPr">66</span></div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="wave"><span class="lbl resp">Resp &nbsp;6,25 mm/s</span><canvas id="cResp"></canvas></div>
+    <div class="num resp" id="nResp">
+      <div class="name"><span>FR</span><span style="font-size:10px">rpm</span></div>
+      <div class="lim">30<br>10</div>
+      <div class="val" id="vRr">9</div>
+      <div class="unit">rpm</div>
+    </div>
+  </div>
+  <div class="row nibpRow">
+    <div class="box nibp" id="nNibp">
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:4px">PNI &nbsp;<span style="opacity:.7;font-weight:400">mmHg</span></div>
+        <span class="big" id="nibpVal">170/90</span><span class="map" id="nibpMap">(117)</span>
+      </div>
+      <div class="meta"><span id="stageLbl" style="font-weight:700;color:#cfe3ff">PARTE 1</span><br>Última: <span id="nibpTime">--:--</span><br>Lim. 160/90</div>
+    </div>
+  </div>
+</main>
+<footer>Simulação educacional — não é um equipamento médico. Sistema desenvolvido por Cauê Prado</footer>
+
+<script>
+(() => {
+  // ---------- Parâmetros da simulação ----------
+  const STAGES = [
+    {name:'PARTE 1', hr:66, sys:170, dia:90},
+    {name:'PARTE 2', hr:60, sys:180, dia:100},
+  ];
+  let stage = 0;
+  let HR = 66, SYS = 170, DIA = 90;
+  const SPO2 = 75;
+  let rr = 9;                 // alterna entre 8 e 9
+  let soundOn = true, alarmOn = true;
+
+  // ---------- Relógio / PNI ----------
+  const pad = n => String(n).padStart(2,'0');
+  const now0 = new Date();
+  document.getElementById('nibpTime').textContent = pad(now0.getHours())+':'+pad(now0.getMinutes());
+  setInterval(()=>{const d=new Date();document.getElementById('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());},500);
+
+  // ---------- Alarmes ----------
+  const alarms = [
+    {txt:'*** SpO₂ BAIXA 75 < 90', cls:'high', box:'nSpo2'},
+    {txt:'** FR BAIXA', cls:'med', box:'nResp'},
+    {txt:'** PNI SIS ALTA 170 > 160', cls:'med', box:null},
+  ];
+  function updateNibpAlarms(){
+    alarms.splice(2);
+    alarms.push({txt:`** PNI SIS ALTA ${SYS} > 160`, cls:'med', box:null});
+    if(DIA > 90) alarms.push({txt:`** PNI DIA ALTA ${DIA} > 90`, cls:'med', box:null});
+  }
+  const bar = document.getElementById('alarmBar');
+  function renderAlarms(){
+    bar.innerHTML = alarms.map(a=>`<span class="alarm ${a.cls} ${alarmOn&&soundOn?'':'silenced'}">${a.txt}</span>`).join('')
+      + (!soundOn ? '<span class="muted-tag">🔇 ÁUDIO DESLIGADO</span>' : (!alarmOn ? '<span class="muted-tag">🔕 ALARME SILENCIADO</span>' : ''));
+    alarms.forEach(a=>{ if(a.box) document.getElementById(a.box).classList.toggle('alarming', a.cls==='high'); });
+  }
+  renderAlarms();
+
+  // ---------- Áudio ----------
+  let ac = null;
+  function ensureAudio(){
+    if(!ac){ try{ ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ ac=null; } }
+    if(ac && ac.state==='suspended') ac.resume().catch(()=>{});
+  }
+  function tone(freq, start, dur, vol, type){
+    if(!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type||'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(vol, start+0.01);
+    g.gain.setValueAtTime(vol, start+dur-0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, start+dur);
+    o.connect(g).connect(ac.destination);
+    o.start(start); o.stop(start+dur+0.02);
+  }
+  // Bipe do pulso: tom cai conforme a saturação (como monitores reais)
+  function pulseBeep(sat){
+    if(!soundOn || !ac) return;
+    const f = 880 * Math.pow(2, (sat-100)/100 * 2.2); // 75% ≈ grave
+    tone(f, ac.currentTime, 0.09, 0.18, 'triangle');
+  }
+  // Alarme alta prioridade (padrão 3 + 2 pulsos)
+  function alarmBurst(){
+    if(!soundOn || !alarmOn || !ac) return;
+    const t = ac.currentTime + 0.02, f = 960, d = 0.13, gap = 0.08;
+    const seq = [0,1,2, 3.6,4.6];
+    seq.forEach(k=>tone(f, t + k*(d+gap), d, 0.22, 'square'));
+  }
+  setInterval(alarmBurst, 5000);
+
+  // ---------- Botões ----------
+  const bS = document.getElementById('btnSound'), bA = document.getElementById('btnAlarm');
+  function syncBtns(){
+    bS.className = soundOn ? 'on':'off'; bS.textContent = soundOn ? '🔊 Som':'🔇 Sem som';
+    bA.className = alarmOn ? 'on':'off'; bA.textContent = alarmOn ? '🔔 Alarme':'🔕 Alarme';
+    renderAlarms();
+  }
+  bS.onclick = ()=>{ ensureAudio(); soundOn = !soundOn; syncBtns(); if(soundOn) alarmBurst(); };
+  bA.onclick = ()=>{ ensureAudio(); alarmOn = !alarmOn; syncBtns(); if(alarmOn) alarmBurst(); };
+  document.getElementById('startSound').onclick = ()=>{ ensureAudio(); soundOn=true; syncBtns(); document.getElementById('startOverlay').remove(); alarmBurst(); };
+  // ---------- Troca de parte ----------
+  const bStage = document.getElementById('btnStage');
+  let measuring = false;
+  bStage.onclick = ()=>{
+    if(measuring) return;
+    ensureAudio();
+    stage = 1 - stage;
+    const s = STAGES[stage];
+    HR = s.hr;
+    document.getElementById('vHr').textContent = HR;
+    document.getElementById('vPr').textContent = HR;
+    document.getElementById('stageLbl').textContent = s.name;
+    bStage.textContent = stage===0 ? '▶ Parte 2' : '◀ Parte 1';
+    // simula nova medida da PNI
+    measuring = true;
+    const nv = document.getElementById('nibpVal'), nm = document.getElementById('nibpMap');
+    nv.textContent = '---/---'; nm.textContent = 'medindo…';
+    setTimeout(()=>{
+      SYS = s.sys; DIA = s.dia;
+      nv.textContent = `${SYS}/${DIA}`;
+      nm.textContent = `(${Math.round((SYS+2*DIA)/3)})`;
+      const d = new Date();
+      document.getElementById('nibpTime').textContent = pad(d.getHours())+':'+pad(d.getMinutes());
+      updateNibpAlarms(); renderAlarms();
+      if(soundOn && ac) tone(1200, ac.currentTime, 0.12, 0.15, 'sine');
+      measuring = false;
+    }, 3000);
+  };
+
+  document.getElementById('startMute').onclick  = ()=>{ ensureAudio(); soundOn=false; syncBtns(); document.getElementById('startOverlay').remove(); };
+
+  // ---------- Formas de onda ----------
+  const g = (x, mu, s) => Math.exp(-((x-mu)*(x-mu))/(2*s*s));
+  function ecgAt(ph){ // ph: segundos desde o início do ciclo
+    return 0.12*g(ph,0.10,0.025)            // P
+         - 0.10*g(ph,0.205,0.008)           // Q
+         + 1.00*g(ph,0.225,0.010)           // R
+         - 0.22*g(ph,0.245,0.010)           // S
+         + 0.25*g(ph,0.48,0.045);           // T
+  }
+  function plethAt(ph){ // pulso periférico, atrasado
+    const t = ph - 0.30;
+    const T = 60/HR;
+    const tt = ((t % T)+T)%T;
+    return 0.85*g(tt,0.12,0.06) + 0.28*g(tt,0.34,0.06) + 0.08;
+  }
+
+  function setup(id, color, speed, fn, range){
+    const c = document.getElementById(id), ctx = c.getContext('2d');
+    const ch = {c, ctx, color, speed, fn, range, lastX:null, lastY:null, w:0, h:0};
+    ch.resize = ()=>{
+      const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio||1;
+      c.width = Math.max(1, r.width*dpr); c.height = Math.max(1, r.height*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ch.w = r.width; ch.h = r.height; ch.lastX = null;
+      ctx.clearRect(0,0,ch.w,ch.h);
+    };
+    return ch;
+  }
+  // velocidades em px/s (proporcionais a 25 mm/s e 6,25 mm/s)
+  const chans = [
+    setup('cEcg',  getCss('--ecg'),  140, t=>ecgAt(cardSec) + (Math.random()-.5)*0.015, [-0.35,1.1]),
+    setup('cSpo2', getCss('--spo2'), 140, t=>plethAt(cardSec) + (Math.random()-.5)*0.01, [0,1.05]),
+    setup('cResp', getCss('--resp'), 35,  t=>respAt(t), [-1.15,1.15]),
+  ];
+  function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+  // Respiração lenta e superficial-ish; período varia conforme FR 8/9
+  let respPhase = 0, lastRespT = 0, breathCount = 0;
+  function respAt(t){
+    const dt = t - lastRespT; lastRespT = t;
+    respPhase += dt * (rr/60);
+    // inspiração ~35% do ciclo, expiração mais longa
+    const p = respPhase % 1;
+    const y = p < 0.35 ? Math.sin((p/0.35)*Math.PI/2) : Math.cos(((p-0.35)/0.65)*Math.PI/2);
+    const cyc = Math.floor(respPhase);
+    if(cyc !== breathCount){ breathCount = cyc; rr = Math.random()<0.5 ? 8 : 9; document.getElementById('vRr').textContent = rr; }
+    return y*2 - 1;
+  }
+
+  function resizeAll(){ chans.forEach(ch=>ch.resize()); }
+  window.addEventListener('resize', resizeAll);
+  resizeAll();
+
+  const t0 = performance.now();
+  const heart = document.getElementById('heart');
+  let cyc = 0, cardSec = 0, prevT = 0;
+
+  function frame(){
+    const t = (performance.now()-t0)/1000;
+    const dt = Math.min(0.1, t - prevT); prevT = t;
+    const prevSec = cardSec;
+    cyc += dt * HR/60;
+    const T = 60/HR;
+    cardSec = (cyc % 1) * T;
+    const crossed = (mark)=> (prevSec < mark && cardSec >= mark) || (cardSec < prevSec && (prevSec < mark || cardSec >= mark));
+    chans.forEach(ch=>{
+      if(ch.w<2) return;
+      const ctx = ch.ctx;
+      const x = (t*ch.speed) % ch.w;
+      const [lo,hi] = ch.range, pad=14;
+      const y = ch.h - pad - ((ch.fn(t)-lo)/(hi-lo))*(ch.h - pad*2 - 10);
+      // apaga a faixa à frente do cursor
+      ctx.clearRect(x, 0, 14, ch.h);
+      if(x+14 > ch.w) ctx.clearRect(0,0,(x+14)-ch.w, ch.h);
+      if(ch.lastX!==null && x >= ch.lastX){
+        ctx.strokeStyle = ch.color; ctx.lineWidth = 2; ctx.lineJoin='round';
+        ctx.shadowColor = ch.color; ctx.shadowBlur = 4;
+        ctx.beginPath(); ctx.moveTo(ch.lastX, ch.lastY); ctx.lineTo(x, y); ctx.stroke();
+      }
+      ch.lastX = x; ch.lastY = y;
+    });
+
+    // detecta batimento (pico R) e pulso periférico
+    if(crossed(0.225)){
+      heart.classList.add('beat'); setTimeout(()=>heart.classList.remove('beat'),120);
+    }
+    if(crossed(0.42)) pulseBeep(SPO2);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // pequenas variações realistas nos números
+  setInterval(()=>{
+    const hr = HR + [-1,0,0,0,1][Math.floor(Math.random()*5)];
+    document.getElementById('vHr').textContent = hr;
+    document.getElementById('vPr').textContent = hr;
+    const s = SPO2 + [-1,0,0,0,1][Math.floor(Math.random()*5)];
+    document.getElementById('vSpo2').textContent = s;
+  }, 3000);
+})();
+</script>
+</body>
+</html>
